@@ -833,12 +833,9 @@ ${m.mediaUrl?(m.mediaType==="video"?`<video src="${esc(m.mediaUrl)}" controls pl
 }).join(""):`<div class="chat-empty">مفيش رسائل لسه. اكتب أول رسالة.</div>`}
 </div>
 <div class="chat-input-bar">
-<button class="btn chat-media-btn" data-act="pickMedia" title="صورة أو فيديو" ${S.chatUploading?"disabled":""}>📎</button>
 <textarea id="cmsg" rows="1" placeholder="اكتب رسالة..." maxlength="2000"></textarea>
 <button class="btn" data-act="sendChat" ${S.chatUploading?"disabled":""}>➤</button>
 </div>
-<input type="file" id="cfile" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" style="display:none">
-${S.chatUploading?`<div class="mut" style="text-align:center">جاري الرفع...</div>`:""}
 </div>
 </div>${studentNav()}`;
 }
@@ -887,11 +884,9 @@ ${m.mediaUrl?(m.mediaType==="video"?`<video src="${esc(m.mediaUrl)}" controls pl
 }).join("")||`<div class="chat-empty">مفيش رسائل.</div>`}
 </div>
 <div class="chat-input-bar">
-<button class="btn chat-media-btn" data-act="pickMedia" ${S.chatUploading?"disabled":""}>📎</button>
 <textarea id="cmsg" rows="1" placeholder="اكتب رد..." maxlength="2000"></textarea>
 <button class="btn" data-act="sendChat" ${S.chatUploading?"disabled":""}>➤</button>
 </div>
-<input type="file" id="cfile" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" style="display:none">
 </div>`;
 }
 
@@ -929,7 +924,7 @@ const A={
   pickMedia(){const f=$("#cfile");if(f)f.click()},
   async sendChat(){
     const ta=$("#cmsg");const text=(ta&&ta.value||"").trim();
-    if(!text&&!S._pendingMedia){toast("اكتب رسالة أو ارفع صورة");return}
+    if(!text){toast("اكتب رسالة");return}
     if(!S.chatPeer){toast("اختار محادثة");return}
     const toUid=S.chatPeer;
     const fromName=S.isAdmin?"المدرس":chatDisplayName();
