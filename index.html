@@ -330,10 +330,7 @@ async function startSession(u){
       const p=await getDoc(doc(db,"students",u.uid));
       S.profile=p.exists()?p.data():{name:"طالب",phone:""};
       S.view="home";S.examsLoaded=false;
-      subs.push(onSnapshot(doc(db,"students",u.uid),s=>{if(s.exists()){
-        const old=S.profile&&S.profile.msg&&S.profile.msg.at;S.profile=s.data();const nw=S.profile.msg&&S.profile.msg.at;
-        if(nw&&nw!==old&&S.profile.msgSeen!==nw&&S.view!=="exam")toast("📩 وصلتك رسالة من المدرس",true);
-        render()}}));
+      subs.push(onSnapshot(doc(db,"students",u.uid),s=>{if(s.exists()){S.profile=s.data();render()}}));
       subs.push(onSnapshot(collection(db,"assessments"),s=>{S.asms=s.docs.map(d=>({id:d.id,...d.data()})).filter(a=>a.published).sort((a,b)=>tms(b)-tms(a));render()}));
       getIp().then(ip=>{
         updateDoc(doc(db,"students",u.uid),{lastLogin:serverTimestamp(),ip:ip||"",device:device()}).catch(()=>{});
@@ -395,7 +392,6 @@ const splash=()=>`<div class="splash"><div><div class="logo">التفوق</div><
 const blockedView=()=>`<div class="wrap"><div class="center"><div class="logo" style="display:inline-block">التفوق</div><h1 style="margin-top:28px">حسابك موقوف</h1><p class="mut" style="max-width:360px;margin:8px auto 24px">تواصل مع المدرس لإعادة تفعيل الحساب.</p><button class="btn ghost" data-act="logout">تسجيل خروج</button></div></div>`;
 const logo=`<div class="logo">التفوق</div>`;
 const header=(extra)=>`<div class="top">${logo}<div class="row">${extra||""}${themeBtn()}</div></div>`;
-const msgCard=()=>{const m=S.profile&&S.profile.msg;return m&&m.text&&S.profile.msgSeen!==m.at?`<div class="card ann" style="border-color:var(--ind)"><b>📩 رسالة من المدرس</b><div style="white-space:pre-wrap;margin:4px 0 10px">${esc(m.text)}</div><button class="btn sm" data-act="ackMsg">تمام، شفتها</button></div>`:""};
 const studentNav=()=>`<nav class="bot"><button class="${S.view==="progress"?"":"on"}" data-act="home">المواد</button><button class="${S.view==="progress"?"on":""}" data-act="progress">تقدمي</button></nav>`;
 
 function maintenance(){return `<div class="wrap"><div class="center"><div class="logo" data-act="logoTap" style="display:inline-block;font-size:40px">التفوق</div>
@@ -425,14 +421,14 @@ function homeView(){
   const ex=S.exams.filter(vis);
   const an=S.site.announceOn&&S.site.announce?`<div class="card ann"><b>📢 إعلان</b><div style="white-space:pre-wrap;margin-top:4px">${esc(S.site.announce)}</div></div>`:"";
   return `<div class="wrap">${header(`<button class="btn ghost sm" data-act="logout">خروج</button>`)}
-<h2>أهلاً يا ${esc(S.profile.name.split(" ")[0])}</h2><p class="mut">اختار المادة اللي عايز تمتحن فيها.</p>${msgCard()}${an}
+<h2>أهلاً يا ${esc(S.profile.name.split(" ")[0])}</h2><p class="mut">اختار المادة اللي عايز تمتحن فيها.</p>${an}
 <div class="grid">${S.examsLoaded?SUBJECTS.map(s=>{const l=ex.filter(e=>e.subject===s.id),done=l.filter(e=>(S.attempts[e.id]||[]).length).length,p=l.length?Math.round(done/l.length*100):0;
   return `<button class="subj" style="background:linear-gradient(135deg,${s.c},${s.c2})" data-act="openSubject" data-id="${s.id}"><span class="g">${s.g}</span><b>${s.name}</b><small>${l.length?l.length+" امتحان · خلصت "+done:"مفيش امتحانات لسه"}</small><div class="sp"><i style="--w:${p}%"></i></div></button>`}).join("")+`<button class="subj wide" style="background:linear-gradient(135deg,#4338CA,#0B5D57)" data-act="openAsms"><span class="g">A+</span><div><b>التقييمات</b><br><small>${S.asms.length?S.asms.length+" تقييم · حلول ونماذج":"مفيش تقييمات لسه"}</small></div></button>`:SUBJECTS.map(()=>`<div class="sk"></div>`).join("")}</div>
 </div>${studentNav()}`}
 function subjectView(){
   const s=SUBJECTS.find(x=>x.id===S.subject),ex=S.exams.filter(e=>e.subject===s.id&&vis(e));
   return `<div class="wrap">${header(`<button class="btn ghost sm" data-act="home">رجوع</button>`)}
-<h2 style="color:${s.c2}">امتحانات ${s.name}</h2>${msgCard()}
+<h2 style="color:${s.c2}">امتحانات ${s.name}</h2>
 ${ex.length?ex.map(e=>{
   const at=S.attempts[e.id]||[];
   return `<div class="card lift"><b>${esc(e.title)}</b>
@@ -486,7 +482,7 @@ const skel=()=>`<div class="sk" style="min-height:90px;margin-bottom:12px"></div
 const filesHtml=(l,part,aid)=>l.map(f=>f.kind==="image"?`<div class="card" style="padding:8px"><img class="asmimg" src="${f.data}" alt="${esc(f.name)}" data-act="zoom"><div style="margin-top:6px"><a class="btn ghost sm" href="${f.data}" download="${esc(f.name.replace(/\.\w+$/,""))}.jpg">⬇ تحميل الصورة</a></div></div>`:`<div class="card row"><span>📄 ${esc(f.name)}</span><button class="btn sm" data-act="dlpdf" data-aid="${aid}" data-part="${part}" data-gid="${f.gid}" data-name="${esc(f.name)}">⬇ تحميل</button></div>`).join("");
 function asmListView(){
   return `<div class="wrap">${header(`<button class="btn ghost sm" data-act="home">رجوع</button>`)}
-<h2 style="color:var(--ind)">التقييمات</h2>${msgCard()}
+<h2 style="color:var(--ind)">التقييمات</h2>
 ${S.asms.length?S.asms.map(a=>`<div class="card lift"><div class="row"><div><b>${esc(a.title)}</b><div>${pill(subName(a.subject))} ${a.showSolution?pill("محلول ✓","g"):pill("الحل لسه","y")}</div></div><button class="btn sm" data-act="openAsm" data-id="${a.id}">افتح</button></div></div>`).join(""):`<div class="card mut">مفيش تقييمات دلوقتي. ارجع تاني بعدين.</div>`}
 </div>${studentNav()}`}
 function asmView(){
@@ -507,7 +503,7 @@ function progressView(){
   const weak=bySub.length>1?bySub.slice().sort((a,b)=>a.avg-b.avg)[0]:null;
   const last=L.slice(-10);
   return `<div class="wrap">${header(`<button class="btn ghost sm" data-act="logout">خروج</button>`)}
-<h2>تقدمي</h2>${msgCard()}
+<h2>تقدمي</h2>
 ${L.length?`<div class="stats"><div class="card stat"><b>${L.length}</b><span class="mut">محاولة</span></div><div class="card stat"><b>${exams}</b><span class="mut">امتحان</span></div><div class="card stat"><b>${avgP}%</b><span class="mut">المتوسط</span></div><div class="card stat"><b>${best}%</b><span class="mut">أعلى نتيجة</span></div></div>
 <div class="card"><h3>تطور درجاتك (آخر ${last.length})</h3><div class="bars">${last.map(r=>`<div>${pctOf(r)}<i class="${r.passMark>0&&!r.passed?"f":""}" style="height:${Math.max(3,pctOf(r))*0.9}%"></i></div>`).join("")}</div></div>
 <div class="card"><h3>مستواك في كل مادة</h3>${bySub.map(x=>`<div style="margin-top:8px"><div class="row"><span>${x.s.name}</span><span class="mut">${x.avg}% · ${x.n} محاولة</span></div><div class="hb"><i style="width:${x.avg}%;background:${x.s.c}"></i></div></div>`).join("")}
@@ -653,10 +649,7 @@ function studentDetail(){
 <div class="tl"><span>📍</span><span>IP وجهاز التسجيل: <b dir="ltr">${esc(s.regIp||"-")}</b> · ${esc(s.regDevice||"-")}</span></div>
 ${shared.length?`<div class="err" style="margin-top:10px">نفس الـ IP اتستخدم في حسابات تانية: ${shared.map(x=>`<a href="#" data-act="student" data-id="${x.id}" style="color:inherit;font-weight:700">${esc(x.name)}</a>`).join("، ")}</div>`:""}</div>
 <div class="stats"><div class="card stat"><b>${rs.length}</b><span class="mut">محاولة</span></div><div class="card stat"><b>${avg==null?"-":avg+"%"}</b><span class="mut">المتوسط</span></div><div class="card stat"><b>${w.length?w.filter(r=>r.passed).length+"/"+w.length:"-"}</b><span class="mut">نجاح</span></div><div class="card stat"><b>${rs.reduce((a,r)=>a+(r.tabs||0),0)}</b><span class="mut">مرات خروج</span></div></div>
-<div class="card"><h3>📩 رسالة للطالب</h3><p class="mut" style="margin:0 0 6px">بتظهر له في صفحته أول ما يفتح (وفورًا لو فاتح المنصة) لحد ما يدوس "تمام، شفتها".</p>
-${s.msg&&s.msg.text?`<div class="tl"><span>${s.msgSeen===s.msg.at?"✅":"🕓"}</span><span style="flex:1;white-space:pre-wrap">${esc(s.msg.text)}<div class="mut">${s.msgSeen===s.msg.at?"الطالب شافها":"لسه ما شافهاش"}</div></span><button class="btn ghost sm" data-act="clearStudentMsg" data-id="${s.id}">مسح</button></div>`:""}
-<textarea id="smsg" style="min-height:80px;margin-top:8px" placeholder="اكتب رسالتك للطالب ده بس"></textarea><div style="margin-top:10px"><button class="btn sm" data-act="sendStudentMsg" data-id="${s.id}">إرسال للطالب</button></div></div>
-<div class="card"><h3>ملاحظاتك الخاصة (مش بتظهر للطالب أبدًا)</h3><textarea id="note" style="min-height:80px" placeholder="مثال: بيذاكر بالليل، محتاج متابعة في الرياضيات">${esc(s.note||"")}</textarea><div style="margin-top:10px"><button class="btn sm" data-act="saveNote" data-id="${s.id}">حفظ الملاحظة</button></div></div>
+<div class="card"><h3>ملاحظاتك الخاصة (مش بتظهر للطالب)</h3><textarea id="note" style="min-height:80px" placeholder="مثال: بيذاكر بالليل، محتاج متابعة في الرياضيات">${esc(s.note||"")}</textarea><div style="margin-top:10px"><button class="btn sm" data-act="saveNote" data-id="${s.id}">حفظ الملاحظة</button></div></div>
 <div class="card"><h3>كل نشاط الطالب</h3>${ev.length?ev.slice(0,60).map(e=>`<div class="tl"><span>${e.i}</span><span style="flex:1">${esc(e.x)}</span><span class="mut" style="white-space:nowrap">${new Date(e.t*1000).toLocaleString("ar-EG",{dateStyle:"short",timeStyle:"short"})}</span></div>`).join(""):`<div class="mut">لسه مفيش نشاط.</div>`}</div>
 <div class="card"><h3>سجل الدخول (آخر 30 مرة)</h3>${lg===null||lg===undefined?`<div class="sk" style="min-height:60px"></div>`:lg.length?`<div class="tw"><table><tr><th>الوقت</th><th>IP</th><th>الجهاز والمتصفح</th><th>الشاشة</th><th>المنطقة</th></tr>${lg.map(x=>`<tr><td>${fmt(x.createdAt)}</td><td dir="ltr">${esc(x.ip||"-")}</td><td>${esc(x.device||"-")}</td><td dir="ltr">${esc(x.screen||"-")}</td><td dir="ltr">${esc(x.tz||"-")}</td></tr>`).join("")}</table></div>`:`<div class="mut">مفيش سجل دخول لسه (بيتسجل من الإصدار ده).</div>`}</div>
 <div class="card"><h3>المحاولات</h3>${rs.length?`<div class="tw"><table><tr><th>الامتحان</th><th>المادة</th><th>م</th><th>الدرجة</th><th>%</th><th>النتيجة</th><th>الوقت</th><th>خروج</th><th>التاريخ</th><th></th></tr>
@@ -774,12 +767,6 @@ const A={
     }catch(e){toast("مقدرتش أحمّل الملف. جرّب تاني.")}
     el.disabled=false;
   },
-  async ackMsg(){try{await updateDoc(doc(db,"students",S.user.uid),{msgSeen:S.profile.msg.at})}catch(e){toast("حصلت مشكلة")}},
-  async sendStudentMsg(d){
-    const t=$("#smsg").value.trim();if(!t){toast("اكتب الرسالة الأول");return}
-    try{await updateDoc(doc(db,"students",d.id),{msg:{text:t,at:Date.now()}});$("#smsg").value="";toast("اتبعتت للطالب")}catch(e){toast("مقدرتش أبعت")}
-  },
-  async clearStudentMsg(d){try{await updateDoc(doc(db,"students",d.id),{msg:null});toast("اتمسحت الرسالة")}catch(e){toast("مقدرتش أمسح")}},
   newAsm(){S.editingAsm={id:null,asm:null,q:[],s:[],solText:"",solId:null,rm:[]};S.view="editAsm";render(true)},
   async editAsm(d){
     const a=S.asms.find(q=>q.id===d.id);if(!a)return;
