@@ -702,42 +702,22 @@ function chatNameModal(){
 }
 function startChatSubs(){
   if(!S.user||!db) return;
-  // unsubscribe previous chat subs only (keep others)
   const chatUnsubs = subs.filter(u=>u._chat);
   chatUnsubs.forEach(u=>{try{u()}catch(e){}});
   subs = subs.filter(u=>!u._chat);
-
-  if(S.isAdmin){
-    const qy = query(collection(db,"messages"), orderBy("createdAt","desc"), limit(300));
-    const un = onSnapshot(qy, s=>{
-      const prev = S.messages.length;
-      S.messages = s.docs.map(d=>({id:d.id,...d.data()})).reverse();
-      // unread: messages to admin not read
-      S.unreadChat = S.messages.filter(m=>m.toUid==="admin"&&!m.read).length;
-      updTitle();
-      if(S.view==="admin"&&S.tab==="chat"||S.view==="chat") render();
-    });
-    un._chat=true; subs.push(un);
-  }else{
-    const q1 = query(collection(db,"messages"), where("fromUid","==",S.user.uid), orderBy("createdAt","desc"), limit(150));
-    const q2 = query(collection(db,"messages"), where("toUid","==",S.user.uid), orderBy("createdAt","desc"), limit(150));
-    let buf1=[], buf2=[];
-    const merge=()=>{
-      const map={};
-      [...buf1,...buf2].forEach(m=>map[m.id]=m);
-      S.messages = Object.values(map).sort((a,b)=>{
-        const ta=a.createdAt&&a.createdAt.seconds?a.createdAt.seconds:0;
-        const tb=b.createdAt&&b.createdAt.seconds?b.createdAt.seconds:0;
-        return ta-tb;
-      });
-      S.unreadChat = S.messages.filter(m=>m.toUid===S.user.uid&&!m.read).length;
-      updTitle();
-      if(S.view==="chat") render();
-    };
-    const u1=onSnapshot(q1,s=>{buf1=s.docs.map(d=>({id:d.id,...d.data()}));merge()});
-    const u2=onSnapshot(q2,s=>{buf2=s.docs.map(d=>({id:d.id,...d.data()}));merge()});
-    u1._chat=true;u2._chat=true;subs.push(u1,u2);
-  }
+  // شات واحد للمنصة كلها — الرسائل محفوظة دائمًا
+  const qy = query(collection(db,"messages"), where("room","==","platform"), orderBy("createdAt","asc"), limit(500));
+  const un = onSnapshot(qy, s=>{
+    S.messages = s.docs.map(d=>({id:d.id,...d.data()}));
+    const lastSeen = +localStorage.getItem("chatSeen_"+S.user.uid)||0;
+    S.unreadChat = S.messages.filter(m=>m.fromUid!==S.user.uid && (m.createdAt&&m.createdAt.seconds?m.createdAt.seconds*1000:0)>lastSeen).length;
+    updTitle();
+    if((S.view==="chat")||(S.view==="admin"&&S.tab==="chat")) {
+      render();
+      setTimeout(()=>{const el=$("#chatScroll");if(el)el.scrollTop=el.scrollHeight},60);
+    }
+  }, err=>{console.error(err); toast("مشكلة في تحميل الشات. لو طلب فهرس دوس على اللينك في الكونسول.");});
+  un._chat=true; subs.push(un);
 }
 function peerList(){
   // build unique peers from messages
@@ -781,63 +761,49 @@ function chatView(){
   if(!ensureChatName()&&!S.isAdmin){
     return `<div class="wrap">${header(`<button class="btn ghost sm" data-act="home">رجوع</button>`)}${chatNameModal()}</div>${studentNav()}`;
   }
-  const peers=peerList();
-  if(!S.chatPeer){
-    // list
-    return `<div class="wrap">${header(`<button class="btn ghost sm" data-act="home">رجوع</button>`)}
-<h2>الشات</h2>
-<p class="mut">اسمك الظاهر: <b>${esc(chatDisplayName())}</b> · <a href="#" data-act="changeChatName" style="color:var(--pri)">تغيير</a></p>
-<div class="card" style="padding:10px">
-<button class="btn block" data-act="openPeer" data-id="admin">📨 راسل المدرس (الأدمن)</button>
-</div>
-<div class="chat-list">
-${peers.filter(p=>p.uid!=="admin"||true).map(p=>{
-  const prev=p.last?(p.last.text||(p.last.mediaType==="image"?"📷 صورة":p.last.mediaType==="video"?"🎬 فيديو":"")):"";
-  const unread=S.isAdmin?S.messages.filter(m=>m.fromUid===p.uid&&m.toUid==="admin"&&!m.read).length:S.messages.filter(m=>m.fromUid===p.uid&&m.toUid===S.user.uid&&!m.read).length;
-  return `<div class="chat-item" data-act="openPeer" data-id="${esc(p.uid)}">
-<div class="av">${esc((p.name||"؟").charAt(0))}</div>
-<div class="meta"><b>${esc(p.name)}${S.isAdmin&&p.realName&&p.realName!==p.name?` <span class="mut" style="font-weight:400">(${esc(p.realName)})</span>`:""}${unread?`<span class="unread-dot">${unread}</span>`:""}</b>
-<div class="preview">${esc(prev||"ابدأ المحادثة")}</div></div>
-<span class="time">${p.last&&p.last.createdAt?fmt(p.last.createdAt):""}</span>
-</div>`;
-}).join("")||`<div class="chat-empty">لسه مفيش محادثات. دوس "راسل المدرس" وابدأ.</div>`}
-</div>
-</div>${studentNav()}`;
-  }
-  // conversation
-  const peer=peers.find(p=>p.uid===S.chatPeer)||{uid:S.chatPeer,name:S.chatPeer==="admin"?"المدرس (الأدمن)":"طالب",realName:""};
-  const msgs=convMessages(S.chatPeer);
-  // mark as read
-  if(!S.isAdmin){
-    msgs.filter(m=>m.toUid===S.user.uid&&!m.read).forEach(m=>{
-      updateDoc(doc(db,"messages",m.id),{read:true}).catch(()=>{});
-    });
-  }else if(S.chatPeer){
-    msgs.filter(m=>m.toUid==="admin"&&!m.read).forEach(m=>{
-      updateDoc(doc(db,"messages",m.id),{read:true}).catch(()=>{});
-    });
-  }
-  return `<div class="wrap">${header(`<button class="btn ghost sm" data-act="backChatList">رجوع</button>`)}
-<div class="row" style="margin-bottom:8px"><div><b>${esc(peer.name)}</b>${S.isAdmin&&peer.realName&&peer.realName!==peer.name?`<div class="mut">الحساب الحقيقي: ${esc(peer.realName)}</div>`:""}</div></div>
-<div class="chat-wrap">
+  try{localStorage.setItem("chatSeen_"+S.user.uid,String(Date.now()));S.unreadChat=0;updTitle()}catch(e){}
+  const msgs=S.messages||[];
+  return `<div class="wrap">${header(`<button class="btn ghost sm" data-act="home">رجوع</button>`)}
+<h2>شات المنصة</h2>
+<p class="mut">شات واحد مفتوح لكل الطلاب والمدرس · اسمك الظاهر: <b>${esc(chatDisplayName())}</b> · <a href="#" data-act="changeChatName" style="color:var(--pri)">تغيير</a></p>
+<div class="chat-wrap" style="height:calc(100vh - 200px);max-height:560px">
 <div class="chat-list" id="chatScroll">
 ${msgs.length?msgs.map(m=>{
   const me=m.fromUid===S.user.uid;
-  const showWho=!me||S.isAdmin;
   return `<div class="chat-bubble ${me?"me":"them"}">
-${showWho&&!me?`<div class="who ${m.fromName&&m.realName&&m.fromName!==m.realName?"fake":""}">${esc(m.fromName||"؟")}${S.isAdmin&&m.realName&&m.fromName!==m.realName?` <span class="mut">← ${esc(m.realName)}</span>`:""}</div>`:""}
+${!me?`<div class="who ${m.fromName&&m.realName&&m.fromName!==m.realName?"fake":""}">${esc(m.fromName||"؟")}${S.isAdmin&&m.realName&&m.fromName!==m.realName?` <span class="mut">← ${esc(m.realName)}</span>`:""}${m.fromUid&&m.fromUid.length>20?"":""}</div>`:""}
 ${m.text?esc(m.text):""}
-${m.mediaUrl?(m.mediaType==="video"?`<video src="${esc(m.mediaUrl)}" controls playsinline></video>`:`<img src="${esc(m.mediaUrl)}" alt="صورة" loading="lazy">`):""}
 <div class="mut" style="font-size:11px;margin-top:4px;opacity:.7">${fmt(m.createdAt)}</div>
 </div>`;
-}).join(""):`<div class="chat-empty">مفيش رسائل لسه. اكتب أول رسالة.</div>`}
+}).join(""):`<div class="chat-empty">مفيش رسائل لسه. اكتب أول رسالة في شات المنصة.</div>`}
 </div>
 <div class="chat-input-bar">
-<textarea id="cmsg" rows="1" placeholder="اكتب رسالة..." maxlength="2000"></textarea>
-<button class="btn" data-act="sendChat" ${S.chatUploading?"disabled":""}>➤</button>
+<textarea id="cmsg" rows="1" placeholder="اكتب رسالة للجميع..." maxlength="2000"></textarea>
+<button class="btn" data-act="sendChat">➤</button>
 </div>
 </div>
 </div>${studentNav()}`;
+}
+function adminChat(){
+  try{localStorage.setItem("chatSeen_"+S.user.uid,String(Date.now()));S.unreadChat=0;updTitle()}catch(e){}
+  const msgs=S.messages||[];
+  return `<p class="mut">شات واحد مفتوح لكل الطلاب · الرسائل محفوظة · الاسم الظاهر + الاسم الحقيقي ظاهرين ليك</p>
+<div class="chat-wrap" style="height:calc(100vh - 220px);max-height:560px">
+<div class="chat-list" id="chatScroll">
+${msgs.length?msgs.map(m=>{
+  const me=m.fromUid===S.user.uid;
+  return `<div class="chat-bubble ${me?"me":"them"}">
+${!me?`<div class="who ${m.fromName&&m.realName&&m.fromName!==m.realName?"fake":""}">${esc(m.fromName||"؟")}${m.realName&&m.fromName!==m.realName?` <span class="mut">← ${esc(m.realName)}</span>`:""}</div>`:""}
+${m.text?esc(m.text):""}
+<div class="mut" style="font-size:11px;margin-top:4px;opacity:.7">${fmt(m.createdAt)}</div>
+</div>`;
+}).join(""):`<div class="chat-empty">مفيش رسائل لسه.</div>`}
+</div>
+<div class="chat-input-bar">
+<textarea id="cmsg" rows="1" placeholder="اكتب رسالة لكل الطلاب..." maxlength="2000"></textarea>
+<button class="btn" data-act="sendChat">➤</button>
+</div>
+</div>`;
 }
 function adminChat(){
   // reuse chatView logic inside admin tab
@@ -925,31 +891,22 @@ const A={
   async sendChat(){
     const ta=$("#cmsg");const text=(ta&&ta.value||"").trim();
     if(!text){toast("اكتب رسالة");return}
-    if(!S.chatPeer){toast("اختار محادثة");return}
-    const toUid=S.chatPeer;
     const fromName=S.isAdmin?"المدرس":chatDisplayName();
     const realName=S.isAdmin?"الأدمن":(S.profile&&S.profile.name||"");
     const payload={
+      room:"platform",
       fromUid:S.user.uid,
       fromName,
       realName,
-      toUid,
-      toName:toUid==="admin"?"المدرس":"",
-      text:text||"",
-      createdAt:serverTimestamp(),
-      read:false
+      toUid:"all",
+      text,
+      createdAt:serverTimestamp()
     };
-    if(S._pendingMedia){
-      payload.mediaUrl=S._pendingMedia.url;
-      payload.mediaType=S._pendingMedia.type;
-      S._pendingMedia=null;
-    }
     try{
       await addDoc(collection(db,"messages"),payload);
       if(ta)ta.value="";
-      // optimistic already via snapshot
       setTimeout(()=>{const el=$("#chatScroll");if(el)el.scrollTop=el.scrollHeight},100);
-    }catch(e){toast("مقدرتش أبعت الرسالة. اتأكد من النت.");console.error(e)}
+    }catch(e){toast("مقدرتش أبعت الرسالة. اتأكد من النت وقواعد Firestore.");console.error(e)}
   },
 
   openSubject(d){S.subject=d.id;S.view="subject";render(true)},
