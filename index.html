@@ -363,7 +363,7 @@ async function startSession(u){
       }));
     }
   }catch(e){S.site={maintenance:true,message:"في مشكلة مؤقتة في التحميل. جرّب بعد شوية."}}
-  startChatSubs();
+  try{startChatSubs()}catch(e){console.error(e)}
   render(true);
 }
 
@@ -702,22 +702,25 @@ function chatNameModal(){
 }
 function startChatSubs(){
   if(!S.user||!db) return;
-  const chatUnsubs = subs.filter(u=>u._chat);
-  chatUnsubs.forEach(u=>{try{u()}catch(e){}});
-  subs = subs.filter(u=>!u._chat);
-  // شات واحد للمنصة كلها — الرسائل محفوظة دائمًا
-  const qy = query(collection(db,"messages"), where("room","==","platform"), orderBy("createdAt","asc"), limit(500));
-  const un = onSnapshot(qy, s=>{
-    S.messages = s.docs.map(d=>({id:d.id,...d.data()}));
-    const lastSeen = +localStorage.getItem("chatSeen_"+S.user.uid)||0;
-    S.unreadChat = S.messages.filter(m=>m.fromUid!==S.user.uid && (m.createdAt&&m.createdAt.seconds?m.createdAt.seconds*1000:0)>lastSeen).length;
-    updTitle();
-    if((S.view==="chat")||(S.view==="admin"&&S.tab==="chat")) {
-      render();
-      setTimeout(()=>{const el=$("#chatScroll");if(el)el.scrollTop=el.scrollHeight},60);
-    }
-  }, err=>{console.error(err); toast("مشكلة في تحميل الشات. لو طلب فهرس دوس على اللينك في الكونسول.");});
-  un._chat=true; subs.push(un);
+  try{
+    const chatUnsubs = subs.filter(u=>u&&u._chat);
+    chatUnsubs.forEach(u=>{try{u()}catch(e){}});
+    subs = subs.filter(u=>!(u&&u._chat));
+    const qy = query(collection(db,"messages"), where("room","==","platform"), orderBy("createdAt","asc"), limit(500));
+    const un = onSnapshot(qy, s=>{
+      try{
+        S.messages = s.docs.map(d=>({id:d.id,...d.data()}));
+        const lastSeen = +localStorage.getItem("chatSeen_"+S.user.uid)||0;
+        S.unreadChat = S.messages.filter(m=>m.fromUid!==S.user.uid && (m.createdAt&&m.createdAt.seconds?m.createdAt.seconds*1000:0)>lastSeen).length;
+        updTitle();
+        if((S.view==="chat")||(S.view==="admin"&&S.tab==="chat")) {
+          render();
+          setTimeout(()=>{const el=$("#chatScroll");if(el)el.scrollTop=el.scrollHeight},60);
+        }
+      }catch(e){console.error(e)}
+    }, err=>{console.error(err);});
+    un._chat=true; subs.push(un);
+  }catch(e){console.error("chat sub",e)}
 }
 function peerList(){
   // build unique peers from messages
@@ -1080,7 +1083,9 @@ async function uploadChatMedia(file){
 }
 
 
-if(!configured)render(true);
+// عرض فوري عشان الصفحة متعملش بياض
+render(true);
+if(!configured){S.view="auth";render(true)}
 </script>
 </body>
 </html>
