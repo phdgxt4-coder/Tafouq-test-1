@@ -805,58 +805,6 @@ ${m.text?esc(m.text):""}
 </div>
 </div>`;
 }
-function adminChat(){
-  // reuse chatView logic inside admin tab
-  if(!S.chatPeer){
-    const peers=peerList().filter(p=>p.uid!=="admin");
-    return `<p class="mut">الرسائل الواردة من الطلاب. الاسم الظاهر في الشات + الاسم الحقيقي للحساب.</p>
-<input id="sqchat" type="text" placeholder="ابحث بالاسم" value="${esc(S.chatFilter||"")}" style="margin-bottom:12px">
-<div class="chat-list">
-${peers.filter(p=>{
-  const q=(S.chatFilter||"").trim().toLowerCase();
-  if(!q) return true;
-  return (p.name||"").toLowerCase().includes(q)||(p.realName||"").toLowerCase().includes(q);
-}).map(p=>{
-  const prev=p.last?(p.last.text||(p.last.mediaType==="image"?"📷 صورة":"🎬 فيديو")):"";
-  const unread=S.messages.filter(m=>m.fromUid===p.uid&&m.toUid==="admin"&&!m.read).length;
-  return `<div class="chat-item" data-act="openPeer" data-id="${esc(p.uid)}">
-<div class="av">${esc((p.name||"؟").charAt(0))}</div>
-<div class="meta"><b>${esc(p.name)}${p.realName&&p.realName!==p.name?` <span class="mut" style="font-weight:400">(${esc(p.realName)})</span>`:""}${unread?`<span class="unread-dot">${unread}</span>`:""}</b>
-<div class="preview">${esc(prev||"")}</div></div>
-<span class="time">${p.last&&p.last.createdAt?fmt(p.last.createdAt):""}</span>
-</div>`;
-}).join("")||`<div class="card mut">مفيش رسائل لسه.</div>`}
-</div>`;
-  }
-  // force student-like conversation but without studentNav
-  const peers=peerList();
-  const peer=peers.find(p=>p.uid===S.chatPeer)||{uid:S.chatPeer,name:"طالب",realName:""};
-  const msgs=convMessages(S.chatPeer);
-  msgs.filter(m=>m.toUid==="admin"&&!m.read).forEach(m=>{
-    updateDoc(doc(db,"messages",m.id),{read:true}).catch(()=>{});
-  });
-  return `<div class="row" style="margin-bottom:8px"><button class="btn ghost sm" data-act="backChatList">← كل المحادثات</button>
-<div><b>${esc(peer.name)}</b>${peer.realName&&peer.realName!==peer.name?`<div class="mut">الحساب: ${esc(peer.realName)}</div>`:""}</div></div>
-<div class="chat-wrap" style="height:calc(100vh - 220px)">
-<div class="chat-list" id="chatScroll">
-${msgs.map(m=>{
-  const me=m.fromUid===S.user.uid;
-  return `<div class="chat-bubble ${me?"me":"them"}">
-${!me?`<div class="who ${m.fromName&&m.realName&&m.fromName!==m.realName?"fake":""}">${esc(m.fromName||"؟")}${m.realName&&m.fromName!==m.realName?` <span class="mut">← ${esc(m.realName)}</span>`:""}</div>`:""}
-${m.text?esc(m.text):""}
-${m.mediaUrl?(m.mediaType==="video"?`<video src="${esc(m.mediaUrl)}" controls playsinline></video>`:`<img src="${esc(m.mediaUrl)}" alt="" loading="lazy">`):""}
-<div class="mut" style="font-size:11px;margin-top:4px;opacity:.7">${fmt(m.createdAt)}</div>
-</div>`;
-}).join("")||`<div class="chat-empty">مفيش رسائل.</div>`}
-</div>
-<div class="chat-input-bar">
-<textarea id="cmsg" rows="1" placeholder="اكتب رد..." maxlength="2000"></textarea>
-<button class="btn" data-act="sendChat" ${S.chatUploading?"disabled":""}>➤</button>
-</div>
-</div>`;
-}
-
-
 /* ---------- الأفعال ---------- */
 const A={
   theme(d,el){const t=isDark()?"light":"dark";document.querySelectorAll(".tg").forEach(b=>{b.classList.add("spin");setTimeout(()=>b.classList.remove("spin"),500)});setTheme(t)},
